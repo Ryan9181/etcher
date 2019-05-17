@@ -19,41 +19,11 @@
 const _ = require('lodash')
 const path = require('path')
 const SimpleProgressWebpackPlugin = require('simple-progress-webpack-plugin')
+const MiniCssExtractPlugin = require('mini-css-extract-plugin')
 const nodeExternals = require('webpack-node-externals')
 
 const commonConfig = {
   mode: 'production',
-  optimization: {
-    // Minification breaks angular.
-    minimize: false
-  },
-  target: 'electron-main',
-  module: {
-    rules: [
-      {
-        test: /\.jsx?$/,
-        include: [ path.resolve(__dirname, 'lib/gui') ],
-        use: {
-          loader: 'babel-loader',
-          options: {
-            presets: [
-              '@babel/preset-react',
-              [ '@babel/preset-env', { targets: { electron: '3' } } ]
-            ],
-            plugins: [ '@babel/plugin-proposal-function-bind' ],
-            cacheDirectory: true
-          }
-        }
-      },
-      {
-        test: /\.html$/,
-        include: [ path.resolve(__dirname, 'lib/gui/app') ],
-        use: {
-          loader: 'html-loader'
-        }
-      }
-    ]
-  },
   resolve: {
     extensions: [ '.js', '.jsx', '.json' ]
   },
@@ -61,13 +31,22 @@ const commonConfig = {
     new SimpleProgressWebpackPlugin({
       format: process.env.WEBPACK_PROGRESS || 'verbose'
     })
-  ]
+  ],
+  output: {
+    path: path.join(__dirname, 'generated'),
+    filename: '[name].js'
+  }
 }
 
-const guiConfig = _.assign({
+const guiConfig = _.assign({}, commonConfig, {
   node: {
     __dirname: true,
     __filename: true
+  },
+  target: 'electron-renderer',
+  optimization: {
+    // Minification breaks angular.
+    minimize: false
   },
   externals: [
     nodeExternals(),
@@ -97,20 +76,65 @@ const guiConfig = _.assign({
       return callback()
     }
   ],
+  module: {
+    rules: [
+      {
+        test: /\.jsx?$/,
+        include: [ path.resolve(__dirname, 'lib/gui') ],
+        use: {
+          loader: 'babel-loader',
+          options: {
+            presets: [
+              '@babel/preset-react',
+              [ '@babel/preset-env', { targets: { electron: '3' } } ]
+            ],
+            plugins: [ '@babel/plugin-proposal-function-bind' ],
+            cacheDirectory: true
+          }
+        }
+      },
+      {
+        test: /\.html$/,
+        include: [ path.resolve(__dirname, 'lib/gui/app') ],
+        use: {
+          loader: 'html-loader'
+        }
+      },
+      {
+        test: /\.s(a|c)ss$/,
+        use: [
+          // eslint-disable-next-line no-negated-condition
+          process.env.NODE_ENV !== 'production' ? 'style-loader' : MiniCssExtractPlugin.loader,
+          'css-loader',
+          'sass-loader'
+        ]
+      },
+      {
+        test: /fonts[/\\].*\.(woff|woff2|ttf|otf|eot|svg)([#?]|$)/,
+        loader: 'file-loader',
+        options: {
+          name: 'fonts/[name].[hash].[ext]'
+        }
+      }
+    ]
+  },
   entry: {
     gui: path.join(__dirname, 'lib', 'gui', 'app', 'app.js')
   },
-  output: {
-    path: path.join(__dirname, 'generated'),
-    filename: '[name].js'
-  }
-}, commonConfig)
+  plugins: [
+    new MiniCssExtractPlugin({
+      filename: '[name].css',
+      chunkFilename: '[id].css'
+    })
+  ]
+})
 
-const etcherConfig = _.assign({
+const etcherConfig = _.assign({}, commonConfig, {
   node: {
     __dirname: false,
     __filename: true
   },
+  target: 'electron-main',
   externals: [
     nodeExternals(),
     (context, request, callback) => {
@@ -141,12 +165,8 @@ const etcherConfig = _.assign({
   ],
   entry: {
     etcher: path.join(__dirname, 'lib', 'gui', 'etcher.js')
-  },
-  output: {
-    path: path.join(__dirname, 'generated'),
-    filename: '[name].js'
   }
-}, commonConfig)
+})
 
 module.exports = [
   guiConfig,
